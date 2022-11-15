@@ -4,6 +4,8 @@ Import ListNotations.
 
 (** * An simple algebra of first order terms to describe databases *)
 
+(** ** Syntax *)
+
 (** A [datum] is either a constant or a function symbol applied to a set of [datum] *)
 Inductive datum :=
   | Dcst : string -> datum
@@ -21,41 +23,7 @@ Inductive free_var : pattern -> nat -> Prop :=
   | free_var_cmp x f l :
     Exists (fun p => free_var p x) l -> free_var (Pcmp f l) x.
 
-(** Closed substitutions (functions from variables to [datum]) *)
-Definition csubstitution := nat -> datum.
-
-(** Open substitutions (functions from variables to [pattern]) *)
-Definition psubstitution := nat -> pattern.
-
-(** Apply a closed substitution to a pattern *)
-Fixpoint csubst (p : pattern) (sub : csubstitution) : datum :=
-  match p with
-  | Pcst c => Dcst c
-  | Pcmp f pats =>
-    Dcmp f (map (fun p => csubst p sub) pats)
-  | Pvar n => sub n
-  end.
-
-(** Apply an open substitution to a pattern *)
-Fixpoint psubst (p : pattern) (sub : psubstitution) : pattern :=
-  match p with
-  | Pcst c => p
-  | Pcmp f pats =>
-    Pcmp f (map (fun p => psubst p sub) pats)
-  | Pvar n => sub n
-  end.
-
-(** What is means that a substitution is a matching for a [datum] and a [pattern] *)
-Definition Matching sub (dat : datum) (pat : pattern) : Prop :=
-  dat = csubst pat sub.
-
-(** What is means that a [pattern] matches a [datum] *)
-Definition Match (dat : datum) (pat : pattern) : Prop :=
-  exists sub, Matching sub dat pat.
-
-(** What is means that two patterns are unifiable *)
-Definition Unify (pat1 pat2 : pattern) : Prop :=
-  exists sub, psubst pat1 sub = psubst pat2 sub.
+(** ** Induction Principles *)
 
 (** We need a stronger induction principle that
     the one infered by Coq.
@@ -79,7 +47,7 @@ Fixpoint datum_induction
   end.
 
 (** We need a stronger induction principle that
-    the one infered by Coq.
+  the one infered by Coq.
 *)
 Fixpoint pattern_induction
   (P : pattern -> Prop)
@@ -181,3 +149,41 @@ Proof.
 Qed.
 
 Infix "=?" := (datum_eqb)%datum.
+
+(** ** First Order Substitution *)
+
+(** Closed substitutions (functions from variables to [datum]) *)
+Definition csubstitution := nat -> datum.
+
+(** Open substitutions (functions from variables to [pattern]) *)
+Definition psubstitution := nat -> pattern.
+
+(** Apply a closed substitution to a pattern *)
+Fixpoint csubst (p : pattern) (sub : csubstitution) : datum :=
+  match p with
+  | Pcst c => Dcst c
+  | Pcmp f pats =>
+    Dcmp f (map (fun p => csubst p sub) pats)
+  | Pvar n => sub n
+  end.
+
+(** Apply an open substitution to a pattern *)
+Fixpoint psubst (p : pattern) (sub : psubstitution) : pattern :=
+  match p with
+  | Pcst c => p
+  | Pcmp f pats =>
+    Pcmp f (map (fun p => psubst p sub) pats)
+  | Pvar n => sub n
+  end.
+
+(** What is means that a substitution is a matching for a [datum] and a [pattern] *)
+Definition Matching sub (dat : datum) (pat : pattern) : Prop :=
+  dat = csubst pat sub.
+
+(** What is means that a [pattern] matches a [datum] *)
+Definition Match (dat : datum) (pat : pattern) : Prop :=
+  exists sub, Matching sub dat pat.
+
+(** What is means that two patterns are unifiable *)
+Definition Unify (pat1 pat2 : pattern) : Prop :=
+  exists sub, psubst pat1 sub = psubst pat2 sub.
