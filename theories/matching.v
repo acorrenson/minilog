@@ -90,9 +90,6 @@ Fixpoint decompose (l1 : list datum) (l2 : list pattern) :=
 Definition matching_step (st : state) : status :=
   match equations st with
   | [] => Success (solution st)
-  | (Dcst c1, Pcst c2)::equs =>
-    if (c1 =? c2)%string then Update (Build_state equs (solution st))
-    else Failure
   | (Dcmp f1 l1, Pcmp f2 l2)::equs =>
     if (f1 =? f2)%string then
       match decompose l1 l2 with
@@ -106,7 +103,6 @@ Definition matching_step (st : state) : status :=
     | Some vx =>
       if (vx =? d)%datum then Update (Build_state equs (solution st)) else Failure
     end
-  | _::_ => Failure
   end.
 
 Lemma decompose_equiv:
@@ -144,42 +140,6 @@ Proof.
   intros [equs1 sol1] [equs2 sol2] H.
   induction equs1 as [| [dat1 pat1] equs1 _] in equs2, sol2, H |-*; try easy.
   destruct dat1, pat1; try easy.
-  - unfold matching_step in H. simpl in H.
-    destruct get eqn:Hget in H;
-    try destruct datum_eqb eqn:Hdat in H; try easy.
-    + inversion H; subst. clear H. intros sub. split.
-      * intros Hsat. inversion_clear Hsat as [| ? ? H1 H2]; subst.
-        apply Forall_app in H2 as [H2 H3].
-        red. cbn. apply Forall_app. split; auto.
-      * intros Hsat. red. cbn. apply Forall_cons; auto.
-        apply datum_eqb_eq in Hdat; subst.
-        unfold satisfy, state_as_equations in Hsat.
-        apply Forall_app in Hsat as [_ H2]. simpl in H2.
-        apply get_in in Hget.
-        rewrite Forall_forall in H2.
-        now specialize (H2 (Dcst s, Pvar n) (in_map_in_equations _ _ _ Hget)).
-    + inversion H; subst. clear H. intros sub. split.
-      * intros Hsat. inversion_clear Hsat as [| ? ? H1 H2].
-        apply Forall_app in H2 as [H2 H3].
-        red. cbn. apply Forall_app; split; auto.
-      * intros Hsat. unfold satisfy in *. cbn in *.
-        apply Forall_app in Hsat as [H1 H2]. simpl in *.
-        inversion H2 as [|? ? H3 H4]; subst.
-        apply Forall_cons; auto.
-        apply Forall_app; auto.
-  - unfold matching_step in H. simpl in H.
-    destruct String.eqb eqn:Hstr in H; try easy.
-    inversion H; subst. clear H.
-    apply String.eqb_eq in Hstr as ->.
-    intros sub. split.
-    * intros Hsat. unfold satisfy in *. cbn in *.
-      inversion Hsat as [| ? ? H1 H2]; subst.
-      apply Forall_app in H2 as [H3 H4].
-      apply Forall_app; auto.
-    * intros [H1 H2]%Forall_app.
-      unfold satisfy in *; cbn in *.
-      apply Forall_cons; try easy.
-      now apply Forall_app.
   - unfold matching_step in H. simpl in H.
     destruct get eqn:Hget in H;
     try destruct datum_eqb eqn:Hdat in H; try easy.
@@ -293,21 +253,6 @@ Proof.
     apply datum_eqb_neq in Heq2.
     now rewrite H1 in Heq2.
   + unfold matching_step in Heq. simpl in *.
-    destruct String.eqb eqn:Heq2; try easy.
-    apply String.eqb_neq in Heq2.
-    now inversion H1.
-  + inversion H1.
-  + unfold matching_step in Heq. simpl in *.
-    destruct get eqn:Heq1; try easy.
-    destruct datum_eqb eqn:Heq2; try easy.
-    apply get_in, in_map_in_equations in Heq1.
-    rewrite Forall_forall in H3.
-    specialize (H3 _ Heq1). simpl in H3.
-    unfold Matching in *; subst. simpl in *.
-    apply datum_eqb_neq in Heq2.
-    now rewrite H1 in Heq2.
-  + inversion H1.
-  + unfold matching_step in Heq. simpl in *.
     destruct String.eqb eqn:Heq2.
     destruct decompose eqn:Heq3; try easy.
     apply decompose_fail in Heq3.
@@ -350,20 +295,11 @@ Lemma matching_step_mono:
 Proof.
   intros. red.
   destruct st1 as [equs sols]. simpl.
-  destruct equs as [|[ [| f1 l1] [| | f2 l2]] equs]; unfold matching_step in H; simpl in *|-; try easy.
+  destruct equs as [|[ [f1 l1] [| f2 l2]] equs]; unfold matching_step in H; simpl in *|-; try easy.
   + unfold state_size, equations_size, sum.
     destruct get eqn:Hget; try easy.
     destruct datum_eqb eqn:Heq; try easy.
     apply datum_eqb_eq in Heq; subst.
-    all: inversion_clear H; simpl.
-    all: apply sum_aux_mono; lia.
-  + unfold state_size, equations_size, sum. simpl.
-    destruct String.eqb in H; try easy.
-    inversion_clear H; simpl.
-    apply sum_aux_mono. lia.
-  + unfold state_size, equations_size, sum. simpl.
-    destruct get eqn:Hget; try easy.
-    destruct datum_eqb eqn:Heq; try easy.
     all: inversion_clear H; simpl.
     all: apply sum_aux_mono; lia.
   + unfold state_size, equations_size.
@@ -496,7 +432,7 @@ Lemma csubst_extend_map:
     covers_pattern sub pat ->
     csubst pat (interp sub) = csubst pat (interp ((x, vx)::sub)).
 Proof.
-  refine (pattern_induction _ _ _ _); try easy.
+  refine (pattern_induction _ _ _); try easy.
   - intros. unfold interp. simpl.
     destruct (x0 =? x)%nat eqn:Heq1.
     + apply Nat.eqb_eq in Heq1; subst.
@@ -600,15 +536,6 @@ Proof.
   intros [[| [dat pat] equs1] sol1] [equs2 sol2] H1 H2; simpl solution in *; try easy.
   cbn in H2.
   destruct dat, pat; try easy.
-  - destruct get eqn:Heq1.
-    destruct datum_eqb eqn:Heq2; try easy.
-    + apply datum_eqb_eq in Heq2; subst.
-      inversion H2; subst; auto.
-    + inversion H2; subst. clear H2.
-      now econstructor.
-  - destruct String.eqb eqn:Heq1; try easy.
-    apply String.eqb_eq in Heq1; subst.
-    now inversion H2; subst.
   - destruct get eqn:Heq1.
     destruct datum_eqb eqn:Heq2; try easy.
     + apply datum_eqb_eq in Heq2; subst.
