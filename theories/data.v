@@ -1,4 +1,4 @@
-From Coq Require Import String List Program.Wf.
+From Coq Require Import String List Program.Wf Arith.
 From minilog Require Import utils.
 Import ListNotations.
 
@@ -25,8 +25,11 @@ Inductive free_var : pattern -> nat -> Prop :=
   | free_var_cmp x f l :
     Exists (fun p => free_var p x) l -> free_var (Pcmp f l) x.
 
-Definition is_free (p : pattern) (x : nat) : bool :=
-  true (* todo *).
+Fixpoint is_free (p : pattern) (x : nat) : bool :=
+  match p with
+  | Pvar y => (y =? x)%nat
+  | Pcmp _ pats => existsb (fun p => is_free p x) pats
+  end.
 
 Axiom is_free_iff:
   forall p x, is_free p x = true <-> free_var p x.

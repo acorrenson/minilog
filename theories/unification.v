@@ -153,24 +153,36 @@ Theorem unification_step_equiv:
 Proof.
   intros [equs1 sol1] [equs2 sol2] Hstep sub.
   induction equs1 as [| [dat1 pat1] equs1 _] in equs2, sol2, Hstep |-*; try easy.
-  destruct dat1, pat1; try easy.
-  cbn in Hstep.
-  destruct (s =? s0)%string eqn:Heq1; try easy.
-  destruct (decompose l l0) eqn:Heq2; try easy.
-  apply String.eqb_eq in Heq1; subst.
-  inversion Hstep; subst. clear Hstep.
-  apply (decompose_equiv s0 s0 _ _ _ (String.eqb_refl s0)) in Heq2.
-  specialize (Heq2 sub).
-  unfold state_as_equations. simpl. split.
-  - intros H. inversion H as [|? ? H2 H3]; subst.
-    clear H. apply Forall_app in H3 as [H3 H4].
-    do 2 (apply Forall_app; split; auto).
-    apply Heq2. now econstructor.
-  - intros [[H1 H2]%Forall_app H3]%Forall_app.
-    apply Forall_cons.
-    + apply Heq2 in H1. now inversion H1.
-    + apply Forall_app; split; auto.
-Qed.
+  destruct dat1, pat1; cbn in Hstep.
+  - destruct (n0 =? n)%nat eqn:Heq1; try easy.
+    inversion Hstep; subst. clear Hstep.
+    apply Nat.eqb_neq in Heq1.
+    unfold state_as_equations. simpl.
+    admit.
+  - destruct (existsb)%nat eqn:Heq1; try easy.
+    inversion Hstep; subst. clear Hstep.
+    unfold state_as_equations. simpl.
+    admit.
+  - destruct (existsb)%nat eqn:Heq1; try easy.
+    inversion Hstep; subst. clear Hstep.
+    unfold state_as_equations. simpl.
+    admit.
+  - destruct (s =? s0)%string eqn:Heq1; try easy.
+    destruct (decompose l l0) eqn:Heq2; try easy.
+    apply String.eqb_eq in Heq1; subst.
+    inversion Hstep; subst. clear Hstep.
+    apply (decompose_equiv s0 s0 _ _ _ (String.eqb_refl s0)) in Heq2.
+    specialize (Heq2 sub).
+    unfold state_as_equations. simpl. split.
+    + intros H. inversion H as [|? ? H2 H3]; subst.
+      clear H. apply Forall_app in H3 as [H3 H4].
+      do 2 (apply Forall_app; split; auto).
+      apply Heq2. now econstructor.
+    + intros [[H1 H2]%Forall_app H3]%Forall_app.
+      apply Forall_cons.
+      apply Heq2 in H1. now inversion H1.
+      apply Forall_app; split; auto.
+Admitted.
 
 (** ** INVARIAAAAAANT !!!! *)
 
