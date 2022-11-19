@@ -1,5 +1,6 @@
 -R theories/ minilog
 theories/utils.v
 theories/data.v
-theories/matching.v
-theories/unification.v
+theories/substitutions.v
+theories/algos/matching.v
+theories/algos/unification.v

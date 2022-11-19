@@ -1,5 +1,5 @@
 From Coq Require Import String List Arith Lia.
-From minilog Require Import data utils.
+From minilog Require Import data utils substitutions.
 Import ListNotations.
 
 (** * Verified Matching Algorithm *)
@@ -9,19 +9,15 @@ Import ListNotations.
 *)
 Record state := {
   equations : list (datum * pattern);
-  solution  : @fin_map datum;
+  solution  : fin_csubst;
 }.
-
-(** Intepreting a finite map as a substitution *)
-Definition interp (sub : fin_map) : csubstitution :=
-  fun x => match get sub x with None => Dcst "" | Some vx => vx end.
 
 (** At every iteration, the algorithm either fails, update the current state,
     or terminates with a solution *)
 Inductive status :=
   | Failure
   | Update (st : state)
-  | Success (sub : @fin_map datum).
+  | Success (sub : fin_csubst).
 
 (** Intepreting a finite map as a set of equations *)
 Definition map_as_equations (m : @fin_map datum) :=
@@ -90,7 +86,7 @@ Fixpoint decompose (l1 : list datum) (l2 : list pattern) :=
 Definition matching_step (st : state) : status :=
   match equations st with
   | [] => Success (solution st)
-  | (Dcmp f1 l1, Pcmp f2 l2)::equs =>
+  | (Dapp f1 l1, Papp f2 l2)::equs =>
     if (f1 =? f2)%string then
       match decompose l1 l2 with
       | Some equs' => Update (Build_state (equs' ++ equs) (solution st))
@@ -109,7 +105,7 @@ Lemma decompose_equiv:
   forall s1 s2 l1 l2 l,
     (s1 =? s2)%string = true ->
     decompose l1 l2 = Some l ->
-    equiv l [(Dcmp s1 l1, Pcmp s2 l2)].
+    equiv l [(Dapp s1 l1, Papp s2 l2)].
 Proof.
   intros * ->%String.eqb_eq H sub. 
   induction l2 in l, l1, H, sub |-*.
@@ -153,7 +149,7 @@ Proof.
         apply Forall_app in Hsat as [_ H2]. simpl in H2.
         apply get_in in Hget.
         rewrite Forall_forall in H2.
-        now specialize (H2 (Dcmp s l, Pvar n) (in_map_in_equations _ _ _ Hget)).
+        now specialize (H2 (Dapp s l, Pvar n) (in_map_in_equations _ _ _ Hget)).
     + inversion H; subst. clear H. intros sub. split.
       * intros Hsat. inversion_clear Hsat as [| ? ? H1 H2].
         apply Forall_app in H2 as [H2 H3].
@@ -225,7 +221,7 @@ Qed.
 
 Lemma match_list_length:
   forall sub s1 l1 s2 l2 ,
-    Matching sub (Dcmp s1 l1) (Pcmp s2 l2) ->
+    Matching sub (Dapp s1 l1) (Papp s2 l2) ->
     length l1 = length l2.
 Proof.
   intros. inversion H; subst.
@@ -306,7 +302,7 @@ Proof.
     destruct String.eqb eqn:Heq1; try easy.
     destruct decompose as [equs'|] eqn:Heq2; try easy.
     inversion_clear H; simpl equations.
-    fold (app [(Dcmp f1 l1, Pcmp f2 l2)] equs).
+    fold (app [(Dapp f1 l1, Papp f2 l2)] equs).
     do 2 rewrite sum_app.
     apply Nat.add_lt_mono_r.
     induction l1 as [| d1 l1 IH] in l2, equs', Heq2 |-* ; simpl in Heq2.
@@ -381,7 +377,7 @@ Definition matching (d : datum) (p : pattern) :=
 *)
 Definition certified_matching (dat : datum) (pat : pattern) : bool :=
   match matching dat pat with
-  | Some sub => csubst pat (interp sub) =? dat
+  | Some sub => csubst pat sub =? dat
   | None => false
   end.
 
@@ -399,20 +395,20 @@ Qed.
 (** What it means that the domain of a finite map covers the variables of
     of a given pattern
 *)
-Definition covers_pattern (sub : @fin_map datum) pat :=
+Definition covers_pattern (sub : fin_csubst) pat :=
   forall x, free_var pat x -> get sub x <> None.
 
 (** What it means that the domain of a finite map covers the variables of
     of a set of equations
 *)
-Definition covers_equs (sub : @fin_map datum) (equs : list (datum * pattern)) :=
+Definition covers_equs (sub : fin_csubst) (equs : list (datum * pattern)) :=
   Forall (fun '(_, pat) => covers_pattern sub pat) equs.
 
 (** If a finite map covers the variables of a pattern, it also covers all its subpaterns *)
 Lemma covers_subpattern:
   forall sub s x xs,
-    covers_pattern sub (Pcmp s (x::xs)) ->
-    covers_pattern sub x /\ covers_pattern sub (Pcmp s xs).
+    covers_pattern sub (Papp s (x::xs)) ->
+    covers_pattern sub x /\ covers_pattern sub (Papp s xs).
 Proof.
   intros * H. split.
   - intros n Hn. apply H.
@@ -430,10 +426,10 @@ Lemma csubst_extend_map:
   forall pat sub x vx,
     get sub x = None ->
     covers_pattern sub pat ->
-    csubst pat (interp sub) = csubst pat (interp ((x, vx)::sub)).
+    csubst pat (cinterp sub) = csubst pat (cinterp ((x, vx)::sub)).
 Proof.
   refine (pattern_induction _ _ _); try easy.
-  - intros. unfold interp. simpl.
+  - intros. unfold cinterp. simpl.
     destruct (x0 =? x)%nat eqn:Heq1.
     + apply Nat.eqb_eq in Heq1; subst.
       destruct get eqn:Heq2; try easy.
@@ -441,7 +437,7 @@ Proof.
       now rewrite Heq2 in H0.
     + destruct get eqn:Heq2; try easy.
   - intros * H1 * H2 H3. simpl.
-    assert (Heq : map (fun p : pattern => csubst p (interp sub)) dats = map (fun p : pattern => csubst p (interp ((x, vx) :: sub))) dats).
+    assert (Heq : map (fun p : pattern => csubst p (cinterp sub)) dats = map (fun p : pattern => csubst p (cinterp ((x, vx) :: sub))) dats).
     { apply map_ext_in. intros.
       rewrite Forall_forall in H1. apply H1; try easy.
       red. intros. apply H3. econstructor.
@@ -457,8 +453,8 @@ Lemma satisfy_extend_map:
   forall sub x vx equs,
     get sub x = None ->
     covers_equs sub equs ->
-    satisfy (interp sub) equs ->
-    satisfy (interp ((x, vx)::sub)) equs.
+    satisfy (cinterp sub) equs ->
+    satisfy (cinterp ((x, vx)::sub)) equs.
 Proof.
   intros * H1 H2 H3. induction equs as [|[dat pat] equs IH].
   - econstructor.
@@ -466,7 +462,7 @@ Proof.
     inversion H2; subst. clear H2.
     apply Forall_cons.
     + destruct pat; try easy.
-      * unfold Matching, interp in H4 |-*. simpl in *.
+      * unfold Matching, cinterp in H4 |-*. simpl in *.
         destruct (x =? n)%nat eqn:Heq2; try easy.
         apply Nat.eqb_eq in Heq2; subst.
         destruct (get sub n) eqn:Heq1; try easy.
@@ -485,7 +481,7 @@ Qed.
 (** A valid substitution is a finite map
     with only one binding for each variable
 *)
-Inductive valid_subst : @fin_map datum -> Prop :=
+Inductive valid_subst : fin_csubst -> Prop :=
   | valid_nil : valid_subst []
   | valid_cons x vx m :
     valid_subst m ->
@@ -513,14 +509,14 @@ Qed.
 
 (** A finite map satisfies itself *)
 Lemma satisfy_self:
-  forall sub, valid_subst sub -> satisfy (interp sub) (map_as_equations sub).
+  forall sub, valid_subst sub -> satisfy (cinterp sub) (map_as_equations sub).
 Proof.
   induction sub as [| (x, vx) sub IH].
   - econstructor.
   - intros H. inversion H; subst.
     specialize (IH H2).
     simpl. econstructor.
-    + red. unfold interp. simpl.
+    + red. unfold cinterp. simpl.
       now rewrite Nat.eqb_refl.
     + apply satisfy_extend_map; auto.
       apply covers_itself.
@@ -567,13 +563,13 @@ Qed.
     generates a solution to the equations described by [st]
 *)
 Lemma matching_iter_sound:
-  forall st sub Hacc, valid_subst (solution st) -> matching_iter st Hacc = Some sub -> satisfy (interp sub) (state_as_equations st).
+  forall st sub Hacc, valid_subst (solution st) -> matching_iter st Hacc = Some sub -> satisfy (cinterp sub) (state_as_equations st).
 Proof.
   induction st using (well_founded_induction state_lt_wf). intros *.
   destruct Hacc as [Hacc]; cbn. intros Hvalid.
   destruct status_dec as [[st' Hst'] | [sol Hsol] |]; try easy; simpl.
   - pose proof (Hlt := matching_step_mono _ _ Hst').
-    pose proof (Heq := matching_step_equiv _ _ Hst' (interp sub)).
+    pose proof (Heq := matching_step_equiv _ _ Hst' (cinterp sub)).
     pose proof (Hvalid' := matching_step_valid_subst _ _ Hvalid Hst').
     rewrite Heq. now apply H.
   - pose proof (Hsol' := matching_step_sol _ _ Hsol).
@@ -605,7 +601,7 @@ Qed.
 
 (** [matching] is a sound algorithm to solve matching problems *)
 Lemma matching_sound:
-  forall dat pat sub, matching dat pat = Some sub -> Matching (interp sub) dat pat.
+  forall dat pat sub, matching dat pat = Some sub -> Matching (cinterp sub) dat pat.
 Proof.
   intros.
   unfold matching in H.

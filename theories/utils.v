@@ -17,20 +17,20 @@ Notation "'do' X <- A ; B" :=
 
 (** ** Finite Maps as association lists *)
 
-Definition fin_map {A} := list (nat * A).
+Definition fin_map A := list (nat * A).
 
-Fixpoint get {A} (f : @fin_map A) (n : nat) :=
+Fixpoint get {A} (f : fin_map A) (n : nat) :=
   match f with
   | [] => None
   | (x, vx)::xs => 
     if (x =? n)%nat then Some vx else get xs n
   end.
 
-Definition set {A} (f : @fin_map A) (x : nat) (vx : A) :=
+Definition set {A} (f : fin_map A) (x : nat) (vx : A) :=
   (x, vx)::f.
 
 Lemma get_set:
-  forall A (f : @fin_map A) (x : nat) (vx : A),
+  forall A (f : fin_map A) (x : nat) (vx : A),
     get (set f x vx) x = Some vx.
 Proof.
   intros. simpl.
