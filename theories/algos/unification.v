@@ -214,6 +214,25 @@ Proof.
     now econstructor.
 Qed.
 
+Lemma replace_all_2_equiv':
+  forall equs sub x px,
+    sub x = px.[sub] ->
+    satisfy sub (map_as_equations equs) <->
+    satisfy sub (map_as_equations (replace_all_2 equs x px)).
+Proof.
+  intros.
+  induction equs as [| [y py] equs IH]; try easy.
+  split; intros Hsat.
+  - inversion Hsat as [| ? ? H1 H2]; subst.
+    apply IH in H2.
+    econstructor; auto. red.
+    now rewrite <- subst_replace.
+  - inversion Hsat as [| ? ? H1 H2]; subst.
+    apply IH in H2.
+    red in H1. rewrite <- subst_replace in H1 by auto.
+    now econstructor.
+Qed.
+
 Lemma replace_all_2_equiv:
   forall equs sub x y,
     sub x = sub y ->
@@ -244,6 +263,17 @@ Proof.
   - red in H0. now do 2 rewrite <- subst_replace in H0 by auto.
 Qed.
 
+Lemma map_in:
+  forall A B (f : A -> B) (l : list A) b,
+    In b (List.map f l) -> exists a, In a l /\ b = f a.
+Proof.
+  intros. induction l; try easy.
+  destruct H as [<- | H].
+  - repeat econstructor.
+  - specialize (IHl H) as (a' & Ha' & ->).
+    exists a'. split; auto. now right.
+Qed.
+
 Theorem unification_step_equiv:
   forall st1 st2,
     unification_step st1 = Update st2 ->
@@ -272,16 +302,37 @@ Proof.
     inversion Hstep; subst. clear Hstep.
     unfold state_as_equations. simpl.
     split.
-    + intros H. inversion H as [| ? ? H1 H2]; subst.
+    + simpl. intros H. inversion H as [| ? ? H1 H2]; subst.
       apply Forall_app in H2 as [H2 H3]. clear H.
       apply Forall_app. repeat econstructor; auto.
       now apply replace_all_1_equiv'.
-      admit.
-    + admit.
+      now apply replace_all_2_equiv'.
+    + intros [H1 H2]%Forall_app. inversion H2 as [| ? ? H3 H4]; subst. clear H2.
+      econstructor; auto.
+      apply Forall_app. split.
+      pose proof (replace_all_1_equiv' equs1 _ _ _ H3).
+      now apply H in H1.
+      fold (replace_all_2 sol1 n (Papp s l)) in H4.
+      now apply replace_all_2_equiv' in H4.
   - destruct (existsb)%nat eqn:Heq1; try easy.
     inversion Hstep; subst. clear Hstep.
     unfold state_as_equations. simpl.
-    admit.
+    fold (replace_all_2 sol1 n (Papp s l)).
+    split.
+    + simpl. intros H. inversion H as [| ? ? H1 H2]; subst.
+      apply Forall_app in H2 as [H2 H3].
+      red in H1. symmetry in H1.
+      apply Forall_app. split.
+      now apply replace_all_1_equiv'.
+      econstructor; auto.
+      now apply replace_all_2_equiv'.
+    + simpl. intros [H1 H2]%Forall_app.
+      inversion H2 as [| ? ? H3 H4]; subst. clear H2.
+      red in H3. symmetry in H3.
+      econstructor; auto.
+      apply Forall_app. split; auto.
+      now apply replace_all_1_equiv' in H1.
+      now apply replace_all_2_equiv' in H4.
   - destruct (s =? s0)%string eqn:Heq1; try easy.
     destruct (decompose l l0) eqn:Heq2; try easy.
     apply String.eqb_eq in Heq1; subst.
@@ -297,7 +348,7 @@ Proof.
       apply Forall_cons.
       apply Heq2 in H1. now inversion H1.
       apply Forall_app; split; auto.
-Admitted.
+Qed.
 
 (** ** INVARIAAAAAANT !!!! *)
 
