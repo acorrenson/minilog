@@ -6,12 +6,6 @@ Import ListNotations.
 
 (** ** Finite substitutions and replacements *)
 
-Definition replace (p : pattern) (x : nat) (q : pattern) :=
-  psubst p (pinterp [(x, q)]).
-
-Notation "p '.[' x ':=' q ']'" := (replace p x q) (at level 60).
-Notation "p '.[' s ']'" := (psubst p s) (at level 60).
-
 (** Replacement in a list of equations of the forme [term = term] *)
 Definition replace_all_1 (l : list (pattern * pattern)) (x : nat) (p : pattern) :=
   map (fun '(p1, p2) => (p1.[x := p], p2.[x := p])) l.
@@ -141,41 +135,6 @@ Proof.
       apply H2. now repeat econstructor.
 Qed.
 
-Lemma subst_replace_var:
-  forall x y sub pat,
-    sub x = sub y ->
-    pat.[sub] = pat.[x := Pvar y].[sub].
-Proof.
-  intros x y sub.
-  refine (pattern_induction _ _ _).
-  - intros z Heq1. unfold replace, pinterp. simpl.
-    destruct (x =? z)%nat eqn:Heq2; auto.
-    now apply Nat.eqb_eq in Heq2; subst.
-  - intros f dats Hdats Heq1. simpl. f_equal.
-    induction Hdats; auto.
-    specialize (H Heq1). simpl. now f_equal.
-Qed.
-
-Lemma subst_replace:
-  forall x px sub pat,
-    sub x = px.[sub] ->
-    pat.[sub] = pat.[x := px].[sub].
-Proof.
-  intros x px sub.
-  refine (pattern_induction _ _ _).
-  - intros y Heq1.
-    unfold replace, pinterp. simpl.
-    destruct (x =? y)%nat eqn:Heq2; auto.
-    now apply Nat.eqb_eq in Heq2; subst.
-  - intros f dats H1 H2.
-    simpl. f_equal.
-    rewrite map_map.
-    apply map_ext_in.
-    intros p Hp.
-    rewrite Forall_forall in H1.
-    now specialize (H1 _ Hp H2).
-Qed.
-
 Lemma replace_all_1_equiv':
   forall equs sub x px,
     sub x = px.[sub] ->
@@ -261,17 +220,6 @@ Proof.
   intros. split; intros.
   - red. now do 2 rewrite <- subst_replace by auto.
   - red in H0. now do 2 rewrite <- subst_replace in H0 by auto.
-Qed.
-
-Lemma map_in:
-  forall A B (f : A -> B) (l : list A) b,
-    In b (List.map f l) -> exists a, In a l /\ b = f a.
-Proof.
-  intros. induction l; try easy.
-  destruct H as [<- | H].
-  - repeat econstructor.
-  - specialize (IHl H) as (a' & Ha' & ->).
-    exists a'. split; auto. now right.
 Qed.
 
 Theorem unification_step_equiv:
@@ -361,6 +309,23 @@ Definition invariant (st : state) :=
     forall pat1 pat2, In (pat1, pat2) (equations st) ->
       ~free_var pat1 x /\ ~free_var pat2 x.
 
+Lemma in_decompose:
+  forall l1 l2 l3,
+    decompose l1 l2 = Some l3 ->
+    forall pat1 pat2,
+      In (pat1, pat2) l3 -> In pat1 l1 /\ In pat2 l2.
+Proof.
+  induction l1.
+  - intros * H1 * H2. destruct l2; try easy.
+    now injection H1 as <-.
+  - intros * H1 * H2. destruct l2; try easy.
+    simpl in H1. destruct (decompose l1 l2) eqn:Heq; try easy.
+    injection H1 as <-. specialize (IHl1 _ _ Heq).
+    destruct H2 as [[=->->] | H2].
+    repeat econstructor. specialize (IHl1 _ _ H2).
+    split; now right.
+Qed.
+
 Lemma unification_step_invariant:
   forall st1 st2,
     invariant st1 ->
@@ -378,25 +343,48 @@ Proof.
     + split. now apply is_free_false.
       intros pat1 pat2 Hin.
       apply map_in in Hin as [[pat1' pat2'] [Hin [=->->]]].
-      admit. (* should be trivial (no matter the context) *)
+      apply is_free_false in Heq1.
+      split; now apply free_subst_1.
     + apply map_in in Hin as [[y vy] [Hin [=->->]]].
       specialize (H1 _ _ Hin) as [H1 H2]. simpl in H2.
-      specialize (H2 _ _ (or_introl eq_refl)) as [H2 H3].
-      admit. (* should be trivial in context *)
+      pose proof (H2 _ _ (or_introl eq_refl)) as [H3 H4].
+      apply is_free_false in Heq1.
+      split. now apply free_subst_2.
+      intros pat3' pat4' Hin'.
+      apply map_in in Hin' as [[pat3 pat4] [Hin' [=->->]]].
+      pose proof (H2 _ _ (or_intror Hin')) as [H5 H6].
+      split; now apply free_subst_2.
   - destruct pat2.
     + destruct is_free eqn:Heq1; try easy.
       injection H2 as <- <-.
-      intros x vx. simpl.
-      intros [[=<-<-] | Hin].
+      intros x vx [[=<-<-] | Hin]; simpl.
       * split. now apply is_free_false.
         intros pat1 pat2 Hin.
         apply map_in in Hin as [[pat1' pat2'] [Hin [=->->]]].
-        admit. (* should be trivial (no matter the context) *)
+        apply is_free_false in Heq1.
+        split; now apply free_subst_1.
       * apply map_in in Hin as [[y vy] [Hin [=->->]]].
-        admit. (* should be trivial in context *)
+        specialize (H1 _ _ Hin) as [H1 H2]. simpl in H2.
+        pose proof (H2 _ _ (or_introl eq_refl)) as [H3 H4].
+        apply is_free_false in Heq1.
+        split. now apply free_subst_2.
+        intros pat3' pat4' Hin'.
+        apply map_in in Hin' as [[pat3 pat4] [Hin' [=->->]]].
+        pose proof (H2 _ _ (or_intror Hin')) as [H5 H6].
+        split; now apply free_subst_2.
     + destruct (s =? s0)%string eqn:Heq; try easy.
       apply String.eqb_eq in Heq as <-.
       destruct decompose eqn:Heq; try easy.
       injection H2 as <- <-.
-        admit. (* need a lemma about variables after decomposition *)
-Admitted.
+      intros x vx Hin. simpl in *.
+      specialize (H1 _ _ Hin) as [H1 H2].
+      split; auto. intros pat1 pat2 [H | H]%in_app_iff.
+      * apply in_decompose with (pat1 := pat1) (pat2 := pat2) in Heq as [Hin1 Hin2]; auto.
+        specialize (H2 _ _ (or_introl eq_refl)) as [Hfree1 Hfree2].
+        split.
+        intros Hcontr. apply Hfree1.
+        constructor. apply Exists_exists. eexists; eauto.
+        intros Hcontr. apply Hfree2.
+        constructor. apply Exists_exists. eexists; eauto.
+      * now specialize (H2 _ _ (or_intror H)).
+Qed.

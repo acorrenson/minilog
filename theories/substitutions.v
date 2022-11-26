@@ -1,4 +1,4 @@
-From Coq Require Import List String.
+From Coq Require Import List String Arith.
 From minilog Require Import utils data.
 Import ListNotations.
 
@@ -26,6 +26,12 @@ Fixpoint psubst (p : pattern) (sub : psubstitution) : pattern :=
   | Pvar n => sub n
   end.
 
+Definition dom (sub : psubstitution) : nat -> Prop :=
+  fun x => sub x <> Pvar x.
+
+Definition codom (sub : psubstitution) : nat -> Prop :=
+  fun x => exists y, free_var (sub y) x.
+
 Definition fin_csubst := (fin_map datum).
 Definition fin_psubst := (fin_map pattern).
 
@@ -39,6 +45,99 @@ Definition pinterp (sub : fin_psubst) : psubstitution :=
 
 Coercion cinterp : fin_csubst >-> csubstitution.
 Coercion pinterp : fin_psubst >-> psubstitution.
+
+Definition replace (p : pattern) (x : nat) (q : pattern) :=
+  psubst p (pinterp [(x, q)]).
+
+Notation "p '.[' x ':=' q ']'" := (replace p x q) (at level 60).
+Notation "p '.[' s ']'" := (psubst p s) (at level 60).
+
+Lemma subst_replace_var:
+  forall x y sub pat,
+    sub x = sub y ->
+    pat.[sub] = pat.[x := Pvar y].[sub].
+Proof.
+  intros x y sub.
+  refine (pattern_induction _ _ _).
+  - intros z Heq1. unfold replace, pinterp. simpl.
+    destruct (x =? z)%nat eqn:Heq2; auto.
+    now apply Nat.eqb_eq in Heq2; subst.
+  - intros f dats Hdats Heq1. simpl. f_equal.
+    induction Hdats; auto.
+    specialize (H Heq1). simpl. now f_equal.
+Qed.
+
+Lemma subst_replace:
+  forall x px sub pat,
+    sub x = px.[sub] ->
+    pat.[sub] = pat.[x := px].[sub].
+Proof.
+  intros x px sub.
+  refine (pattern_induction _ _ _).
+  - intros y Heq1.
+    unfold replace, pinterp. simpl.
+    destruct (x =? y)%nat eqn:Heq2; auto.
+    now apply Nat.eqb_eq in Heq2; subst.
+  - intros f dats H1 H2.
+    simpl. f_equal.
+    rewrite map_map.
+    apply map_ext_in.
+    intros p Hp.
+    rewrite Forall_forall in H1.
+    now specialize (H1 _ Hp H2).
+Qed.
+
+Lemma map_in:
+  forall A B (f : A -> B) (l : list A) b,
+    In b (List.map f l) -> exists a, In a l /\ b = f a.
+Proof.
+  intros. induction l; try easy.
+  destruct H as [<- | H].
+  - repeat econstructor.
+  - specialize (IHl H) as (a' & Ha' & ->).
+    exists a'. split; auto. now right.
+Qed.
+
+Theorem free_subst_1:
+  forall pat x vx,
+    ~free_var vx x ->
+    ~free_var (pat .[ x := vx]) x.
+Proof.
+  refine (pattern_induction _ _ _).
+  - intros y x vx Hfree Hcontr.
+    unfold replace, pinterp in Hcontr. simpl in Hcontr.
+    destruct (x =? y)%nat eqn:Heq; try easy.
+    apply Nat.eqb_neq in Heq. now inversion Hcontr; subst.
+  - intros f dats IH x vx Hfree Hcontr.
+    inversion Hcontr as [|? ? ? H]; subst. clear Hcontr.
+    apply Exists_exists in H as [pat' [Hpat1 Hpat2]].
+    apply map_in in Hpat1 as [pat [Hpat1 ->]].
+    rewrite Forall_forall in IH.
+    now specialize (IH _ Hpat1 _ _ Hfree).
+Qed.
+
+Theorem free_subst_2:
+  forall pat x y vy,
+    ~free_var vy y ->
+    ~free_var pat y ->
+    ~free_var (pat .[ x := vy]) y.
+Proof.
+  refine (pattern_induction _ _ _).
+  - intros x y z vz Hfree1 Hfree2 Hcontr.
+    unfold replace, pinterp in Hcontr. simpl in Hcontr.
+    destruct (y =? x)%nat eqn:Heq; try easy.
+  - intros f dats IH x y vy Hfree1 Hfree2 Hcontr.
+    inversion Hcontr as [|? ? ? H]; subst. clear Hcontr.
+    apply Exists_exists in H as [pat' [Hpat1 Hpat2]].
+    apply map_in in Hpat1 as [pat [Hpat1 ->]].
+    rewrite Forall_forall in IH.
+    assert (~free_var pat y).
+    { intros Hcontr. apply Hfree2.
+      econstructor. apply Exists_exists.
+      now exists pat.
+    }
+    apply (IH _ Hpat1 _ _ _ Hfree1 H Hpat2).
+Qed.
 
 (** ** Operations on substitutions *)
 
