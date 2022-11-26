@@ -1,5 +1,5 @@
 From Coq Require Import String List Program.Wf Arith.
-From minilog Require Import utils.
+From minilog Require Import utils set.
 Import ListNotations.
 
 (** * An simple algebra of first order terms to describe databases *)
@@ -20,7 +20,7 @@ Inductive pattern :=
 Definition Pcst (c : string) := Papp c [].
 
 (** Free variables of a pattern *)
-Inductive free_var : pattern -> nat -> Prop :=
+Inductive free_var : pattern -> pset nat :=
   | free_var_var x : free_var (Pvar x) x
   | free_var_app x f l :
     Exists (fun p => free_var p x) l -> free_var (Papp f l) x.

@@ -1,5 +1,5 @@
 From Coq Require Import List String Arith.
-From minilog Require Import utils data.
+From minilog Require Import utils data set operators.
 Import ListNotations.
 
 (** * Substitutions and Unifiers *)
@@ -26,10 +26,10 @@ Fixpoint psubst (p : pattern) (sub : psubstitution) : pattern :=
   | Pvar n => sub n
   end.
 
-Definition dom (sub : psubstitution) : nat -> Prop :=
+Definition dom (sub : psubstitution) : pset nat :=
   fun x => sub x <> Pvar x.
 
-Definition codom (sub : psubstitution) : nat -> Prop :=
+Definition codom (sub : psubstitution) : pset nat :=
   fun x => exists y, free_var (sub y) x.
 
 Definition fin_csubst := (fin_map datum).
@@ -137,6 +137,80 @@ Proof.
       now exists pat.
     }
     apply (IH _ Hpat1 _ _ _ Hfree1 H Hpat2).
+Qed.
+
+Lemma free_dom_subst:
+  forall pat sub,
+    ((free_var pat ∩ dom sub) ⊆ ∅)%ops -> pat.[sub] = pat.
+Proof.
+  refine (pattern_induction _ _ _).
+  - intros x sub H. simpl.
+    destruct (sub x) eqn:Heq1.
+    destruct (Nat.eq_dec n x); subst; auto.
+    exfalso. apply (H x). split.
+    econstructor. red. intros Hcontr.
+    rewrite Hcontr in Heq1. now injection Heq1 as ->.
+    exfalso. apply (H x). split. econstructor.
+    red. now rewrite Heq1.
+  - intros f dats H sub Hsub. simpl. f_equal.
+    induction dats; try easy.
+    inversion H; subst. simpl.
+    specialize (IHdats H3). f_equal.
+    apply H2. intros x [Hx1 Hx2].
+    apply Hsub. repeat constructor; auto.
+    apply IHdats. intros x [Hx1 Hx2].
+    apply Hsub. constructor; auto.
+    inversion Hx1; subst.
+    apply free_var_app. now apply Exists_cons_tl.
+Qed.
+
+Lemma dom_cons:
+  forall (sub : fin_psubst) y x vx,
+    dom (((x, vx)::sub) : fin_psubst) y ->
+    x = y \/ dom sub y.
+Proof.
+  intros sub y x vx H.
+  unfold dom, pinterp in *. simpl in *.
+  destruct (x =? y)%nat eqn:Heq.
+  - apply Nat.eqb_eq in Heq as ->. 
+    now left.
+  - right. apply H.
+Qed.
+
+Definition fin_dom (sub : fin_psubst) : pset nat :=
+  fun x => get sub x <> None.
+
+Lemma dom_fin_dom:
+  forall (sub : fin_psubst), (dom sub ⊆ fin_dom sub)%ops.
+Proof.
+  intros sub x Hx.
+  unfold dom, fin_dom, pinterp in *.
+  destruct (get sub x) eqn:Heq; try easy.
+Qed.
+
+Lemma fin_dom_cons:
+  forall (sub : fin_psubst) y x vx,
+    fin_dom (((x, vx)::sub)) y ->
+    x = y \/ fin_dom sub y.
+Proof.
+  intros sub y x vx H.
+  unfold fin_dom, pinterp in *. simpl in *.
+  destruct (x =? y)%nat eqn:Heq.
+  - apply Nat.eqb_eq in Heq as ->. 
+    now left.
+  - right. apply H.
+Qed.
+
+Lemma fin_dom_in:
+  forall x sub, fin_dom sub x -> exists vx, get sub x = Some vx.
+Proof.
+  intros. induction sub as [| [y vy] sol IH]; try easy.
+  apply fin_dom_cons in H as [-> | H].
+  exists vy. simpl. now rewrite Nat.eqb_refl.
+  specialize (IH H) as [vx Hvx].
+  simpl. destruct (y =? x)%nat.
+  repeat econstructor.
+  now exists vx.
 Qed.
 
 (** ** Operations on substitutions *)

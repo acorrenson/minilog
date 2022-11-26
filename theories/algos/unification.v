@@ -1,5 +1,5 @@
 From Coq Require Import String List Arith Lia.
-From minilog Require Import data utils substitutions.
+From minilog Require Import data utils substitutions set operators.
 Import ListNotations.
 
 (** * Verified Unification Algorithm *)
@@ -387,4 +387,77 @@ Proof.
         intros Hcontr. apply Hfree2.
         constructor. apply Exists_exists. eexists; eauto.
       * now specialize (H2 _ _ (or_intror H)).
+Qed.
+
+(** A valid substitution is a finite map
+    with only one binding for each variable
+*)
+Inductive valid_subst : fin_psubst -> Prop :=
+  | valid_nil : valid_subst []
+  | valid_cons x vx m :
+    valid_subst m ->
+    get m x = None ->
+    valid_subst ((x, vx)::m).
+
+Lemma in_valid_subst:
+  forall sub x vx,
+    valid_subst sub -> In (x, vx) sub -> (Pvar x).[sub] = vx.
+Proof.
+  induction sub as [|[x vx] sub IH]; try easy.
+  intros y vy Hval [[=->->] | Hin].
+  - inversion Hval; subst.
+    unfold pinterp. simpl.
+    now rewrite Nat.eqb_refl.
+  - inversion Hval; subst.
+    unfold pinterp. simpl.
+    destruct (x =? y)%nat eqn:Heq.
+    + apply Nat.eqb_eq in Heq; subst.
+      inversion Hval; subst.
+      now apply in_get in Hin.
+    + specialize (IH y vy H1 Hin).
+      simpl in IH. unfold pinterp in IH.
+      now destruct (get sub y).
+Qed.
+
+Lemma satisfy_extend_map:
+  forall sub x vx equs,
+    get sub x = None ->
+    satisfy (pinterp sub) equs ->
+    satisfy (pinterp ((x, vx)::sub)) equs.
+Proof.
+  intros * H1 H2. induction equs as [|[pat1 pat2] equs IH].
+  - econstructor.
+  - inversion H2; subst. clear H2.
+    apply Forall_cons.
+Abort.
+
+Definition sol_invariant (sol : fin_psubst) :=
+  valid_subst sol /\
+  forall x vx, In (x, vx) sol ->
+    ((free_var vx ∩ fin_dom sol) ⊆ ∅)%ops.
+
+Lemma satisfy_self:
+  forall st,
+    sol_invariant (solution st) ->
+    satisfy (pinterp (solution st)) (map_as_equations (solution st)).
+Proof.
+  intros [equs sol] [Hinv1 Hinv2]. simpl in *. clear equs.
+  apply Forall_forall. intros [pat1 pat2] Hin.
+  apply map_in in Hin as [[x vx] [Hin [=->->]]].
+  specialize (Hinv2 _ _ Hin).
+  red. rewrite in_valid_subst with (vx := vx) by auto.
+  rewrite free_dom_subst; auto.
+  intros y [Hy1 Hy2]. apply Hinv2.
+  split; auto.
+  now apply dom_fin_dom.
+Qed.
+
+Lemma fin_dom_replace_all_2:
+  forall sol x vx, 
+    (fin_dom (replace_all_2 sol x vx) ⊆ fin_dom sol)%ops.
+Proof.
+  intros. induction sol as [| [y vy] sol IH]; try easy.
+  intros z Hz. unfold fin_dom in *. simpl in *.
+  destruct (y =? z)%nat; try easy.
+  intros Hcontr. now specialize (IH z Hz).
 Qed.
