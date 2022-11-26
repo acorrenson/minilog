@@ -139,6 +139,34 @@ Proof.
     apply (IH _ Hpat1 _ _ _ Hfree1 H Hpat2).
 Qed.
 
+Theorem free_subst_3:
+  forall pat x vx y,
+    free_var (pat.[x := vx]) y ->
+    ~free_var vx y ->
+    free_var pat y.
+Proof.
+  refine (pattern_induction _ _ _).
+  - intros x y vy z H Hcontr.
+    inversion H; subst.
+    unfold replace, pinterp in H1. simpl in *.
+    destruct (y =? x)%nat eqn:Heq.
+    apply Nat.eqb_eq in Heq; subst.
+    exfalso. apply Hcontr. econstructor.
+    apply Nat.eqb_neq in Heq; subst.
+    injection H1 as ->. econstructor.
+    unfold replace, pinterp in H0. simpl in *.
+    destruct (y =? x)%nat eqn:Heq; try easy.
+    apply Nat.eqb_eq in Heq; subst.
+    exfalso. apply Hcontr. now econstructor.
+  - intros. inversion H0; subst.
+    apply Exists_exists in H5 as [w [[p [Hw1 Hw2]]%map_in Hw3]].
+    rewrite Hw2 in Hw3.
+    rewrite Forall_forall in H.
+    specialize (H _ Hw1 _ _ _ Hw3).
+    econstructor. apply Exists_exists.
+    exists p. split; auto.
+Qed.
+
 Lemma free_dom_subst:
   forall pat sub,
     ((free_var pat ∩ dom sub) ⊆ ∅)%ops -> pat.[sub] = pat.

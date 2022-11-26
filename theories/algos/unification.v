@@ -299,15 +299,54 @@ Qed.
 
 (** ** INVARIAAAAAANT !!!! *)
 
+(** A valid substitution is a finite map
+    with only one binding for each variable
+*)
+Inductive valid_subst : fin_psubst -> Prop :=
+  | valid_nil : valid_subst []
+  | valid_cons x vx m :
+    valid_subst m ->
+    get m x = None ->
+    valid_subst ((x, vx)::m).
+
+Lemma in_valid_subst:
+  forall sub x vx,
+    valid_subst sub -> In (x, vx) sub -> (Pvar x).[sub] = vx.
+Proof.
+  induction sub as [|[x vx] sub IH]; try easy.
+  intros y vy Hval [[=->->] | Hin].
+  - inversion Hval; subst.
+    unfold pinterp. simpl.
+    now rewrite Nat.eqb_refl.
+  - inversion Hval; subst.
+    unfold pinterp. simpl.
+    destruct (x =? y)%nat eqn:Heq.
+    + apply Nat.eqb_eq in Heq; subst.
+      inversion Hval; subst.
+      now apply in_get in Hin.
+    + specialize (IH y vy H1 Hin).
+      simpl in IH. unfold pinterp in IH.
+      now destruct (get sub y).
+Qed.
+
+Definition solution_invariant (sol : fin_psubst) :=
+  valid_subst sol /\
+  forall x vx, In (x, vx) sol ->
+    ((free_var vx ∩ fin_dom sol) ⊆ ∅)%ops.
+
 (** For all binding [x = vx] in the current solution,
     [x] does not occur in [vx] and in the remaning
     equations.
 *)
-Definition invariant (st : state) :=
+Definition equations_invariant (st : state) :=
   forall x vx, In (x, vx) (solution st) ->
     ~(free_var vx x) /\
     forall pat1 pat2, In (pat1, pat2) (equations st) ->
       ~free_var pat1 x /\ ~free_var pat2 x.
+
+Definition invariant (st : state) :=
+  solution_invariant (solution st) /\
+  equations_invariant st.
 
 Lemma in_decompose:
   forall l1 l2 l3,
@@ -328,9 +367,9 @@ Qed.
 
 Lemma unification_step_invariant:
   forall st1 st2,
-    invariant st1 ->
+    equations_invariant st1 ->
     unification_step st1 = Update st2 ->
-    invariant st2.
+    equations_invariant st2.
 Proof.
   intros [equs1 sol1] [equs2 sol2] H1 H2.
   unfold unification_step in H2. simpl in *.
@@ -389,56 +428,113 @@ Proof.
       * now specialize (H2 _ _ (or_intror H)).
 Qed.
 
-(** A valid substitution is a finite map
-    with only one binding for each variable
-*)
-Inductive valid_subst : fin_psubst -> Prop :=
-  | valid_nil : valid_subst []
-  | valid_cons x vx m :
-    valid_subst m ->
-    get m x = None ->
-    valid_subst ((x, vx)::m).
-
-Lemma in_valid_subst:
-  forall sub x vx,
-    valid_subst sub -> In (x, vx) sub -> (Pvar x).[sub] = vx.
+Lemma get_replace_all_2:
+  forall sol x vx y,
+    get sol y = None ->
+    get (replace_all_2 sol x vx) y = None.
 Proof.
-  induction sub as [|[x vx] sub IH]; try easy.
-  intros y vy Hval [[=->->] | Hin].
-  - inversion Hval; subst.
-    unfold pinterp. simpl.
-    now rewrite Nat.eqb_refl.
-  - inversion Hval; subst.
-    unfold pinterp. simpl.
-    destruct (x =? y)%nat eqn:Heq.
-    + apply Nat.eqb_eq in Heq; subst.
-      inversion Hval; subst.
-      now apply in_get in Hin.
-    + specialize (IH y vy H1 Hin).
-      simpl in IH. unfold pinterp in IH.
-      now destruct (get sub y).
+  induction sol as [|[x vx] sol IH]; try easy.
+  intros y vy z Hz. simpl in *.
+  destruct (x =? z)%nat eqn:Heq; try easy.
+  now apply IH.
 Qed.
 
-Lemma satisfy_extend_map:
-  forall sub x vx equs,
-    get sub x = None ->
-    satisfy (pinterp sub) equs ->
-    satisfy (pinterp ((x, vx)::sub)) equs.
+Lemma valid_subst_replace_all_2:
+  forall sol x vx,
+    valid_subst sol ->
+    valid_subst (replace_all_2 sol x vx).
 Proof.
-  intros * H1 H2. induction equs as [|[pat1 pat2] equs IH].
-  - econstructor.
-  - inversion H2; subst. clear H2.
-    apply Forall_cons.
-Abort.
+  induction sol as [|[y vy] sol IH]; try easy.
+  intros x vx H. inversion H; subst. simpl.
+  econstructor; auto.
+  now apply get_replace_all_2.
+Qed.
 
-Definition sol_invariant (sol : fin_psubst) :=
-  valid_subst sol /\
-  forall x vx, In (x, vx) sol ->
-    ((free_var vx ∩ fin_dom sol) ⊆ ∅)%ops.
+Lemma fin_dom_replace_all_2:
+  forall sol x vx, 
+    (fin_dom (replace_all_2 sol x vx) ⊆ fin_dom sol)%ops.
+Proof.
+  intros. induction sol as [| [y vy] sol IH]; try easy.
+  intros z Hz. unfold fin_dom in *. simpl in *.
+  destruct (y =? z)%nat; try easy.
+  intros Hcontr. now specialize (IH z Hz).
+Qed.
+
+Lemma unification_step_strong_invariant:
+  forall st1 st2,
+    invariant st1 ->
+    unification_step st1 = Update st2 ->
+    invariant st2.
+Proof.
+  intros [equs1 sol1] [equs2 sol2] [[Hinv1 Hinv2] Hinv3] H.
+  split; cycle 1. now apply unification_step_invariant in H.
+  unfold unification_step in H. simpl in *.
+  destruct equs1 as [| [pat1 pat2] equs1 ]; try easy.
+  destruct pat1.
+  - destruct is_free eqn:Heq1; try easy.
+    injection H as <- <-. split.
+    + econstructor.
+      now apply valid_subst_replace_all_2.
+      apply get_replace_all_2.
+      destruct (get sol1 n) as [vn|] eqn:Heq; auto.
+      apply get_in in Heq. specialize (Hinv3 _ _ Heq) as [_ H2].
+      specialize (H2 _ _ (or_introl eq_refl)) as [H2 _].
+      exfalso. apply H2. econstructor.
+    + intros x vx [[=->->] | Hin].
+      apply is_free_false in Heq1.
+      intros y [Hy1 [->|Hy2]%fin_dom_cons]; try easy.
+      apply fin_dom_replace_all_2 in Hy2.
+      pose proof (fin_dom_in _ _ Hy2) as [vy Hvy%get_in].
+      specialize (Hinv3 _ _ Hvy) as [_ H2].
+      now specialize (H2 _ _ (or_introl eq_refl)).
+      apply is_free_false in Heq1.
+      intros y [Hy1 [->|Hy2]%fin_dom_cons]; try easy.
+      apply map_in in Hin as [[z vz] [H [=->->]]].
+      specialize (Hinv3 _ _ H) as [H1 H2]. simpl in H2.
+      specialize (H2 _ _ (or_introl eq_refl)) as [H2 H3].
+      eapply free_subst_1; cycle 1; eauto.
+      apply fin_dom_replace_all_2 in Hy2.
+      pose proof (fin_dom_in _ _ Hy2) as [vy Hvy%get_in].
+      specialize (Hinv3 _ _ Hvy) as [H1 H2].
+      specialize (H2 _ _ (or_introl eq_refl)) as [H2 H3].
+      apply map_in in Hin as [[z vz] [H [=->->]]].
+      apply (Hinv2 _ _ H). split; auto.
+      now apply free_subst_3 in Hy1.
+  - destruct pat2.
+    + destruct is_free eqn:Heq1; try easy.
+      injection H as <- <-. split.
+      * econstructor.
+        now apply valid_subst_replace_all_2.
+        apply get_replace_all_2.
+        destruct (get sol1 n) as [vn|] eqn:Heq; auto.
+        apply get_in in Heq. specialize (Hinv3 _ _ Heq) as [_ H2].
+        specialize (H2 _ _ (or_introl eq_refl)) as [_ H2].
+        exfalso. apply H2. econstructor.
+      * apply is_free_false in Heq1.
+        intros x vx [[=<-<-] | Hin].
+        intros y [Hy1 [->|Hy2]%fin_dom_cons]; try easy.
+        apply fin_dom_replace_all_2 in Hy2.
+        pose proof (fin_dom_in _ _ Hy2) as [vy Hvy%get_in].
+        specialize (Hinv3 _ _ Hvy) as [_ H2].
+        now specialize (H2 _ _ (or_introl eq_refl)).
+        apply map_in in Hin as [[z vz] [H [=->->]]].
+        intros y [Hy1 [->|Hy2]%fin_dom_cons]; try easy.
+        eapply free_subst_1; cycle 1; eauto.
+        apply fin_dom_replace_all_2 in Hy2.
+        pose proof (fin_dom_in _ _ Hy2) as [vy Hvy%get_in].
+        specialize (Hinv3 _ _ Hvy) as [H1 H2].
+        specialize (H2 _ _ (or_introl eq_refl)) as [H2 H3].
+        apply (Hinv2 _ _ H). split; auto.
+        now apply free_subst_3 in Hy1.
+    + destruct (s =? s0)%string eqn:Heq; try easy.
+      apply String.eqb_eq in Heq as <-.
+      destruct decompose eqn:Heq; try easy.
+      injection H as <- <-. split; auto.
+Qed.
 
 Lemma satisfy_self:
   forall st,
-    sol_invariant (solution st) ->
+    solution_invariant (solution st) ->
     satisfy (pinterp (solution st)) (map_as_equations (solution st)).
 Proof.
   intros [equs sol] [Hinv1 Hinv2]. simpl in *. clear equs.
@@ -452,12 +548,12 @@ Proof.
   now apply dom_fin_dom.
 Qed.
 
-Lemma fin_dom_replace_all_2:
-  forall sol x vx, 
-    (fin_dom (replace_all_2 sol x vx) ⊆ fin_dom sol)%ops.
+Lemma unification_step_success:
+  forall st sol,
+    unification_step st = Success sol -> sol = solution st.
 Proof.
-  intros. induction sol as [| [y vy] sol IH]; try easy.
-  intros z Hz. unfold fin_dom in *. simpl in *.
-  destruct (y =? z)%nat; try easy.
-  intros Hcontr. now specialize (IH z Hz).
+  intros [equs sol] sol' H.
+  unfold unification_step in H. simpl in *.
+  destruct equs as [| [pat1 pat2]]. now injection H as ->.
+  now destruct pat1, pat2, is_free, String.eqb, decompose.
 Qed.
