@@ -320,17 +320,16 @@ Proof.
     fold (replace_all_2 sol1 n (Papp s l)).
     split.
     + simpl. intros H. inversion H as [| ? ? H1 H2]; subst.
+      red in H1. symmetry in H1. clear H.
       apply Forall_app in H2 as [H2 H3].
-      red in H1. symmetry in H1.
-      apply Forall_app. split.
+      apply Forall_app. repeat econstructor; auto.
       now apply replace_all_1_equiv'.
-      econstructor; auto.
       now apply replace_all_2_equiv'.
     + simpl. intros [H1 H2]%Forall_app.
       inversion H2 as [| ? ? H3 H4]; subst. clear H2.
       red in H3. symmetry in H3.
       econstructor; auto.
-      apply Forall_app. split; auto.
+      apply Forall_app. split.
       now apply replace_all_1_equiv' in H1.
       now apply replace_all_2_equiv' in H4.
   - destruct (s =? s0)%string eqn:Heq1; try easy.
@@ -353,7 +352,7 @@ Qed.
 (** ** INVARIAAAAAANT !!!! *)
 
 (** For all binding [x = vx] in the current solution,
-    [x] is does not occur in [vx] and in the remaning
+    [x] does not occur in [vx] and in the remaning
     equations.
 *)
 Definition invariant (st : state) :=
@@ -368,4 +367,36 @@ Lemma unification_step_invariant:
     unification_step st1 = Update st2 ->
     invariant st2.
 Proof.
+  intros [equs1 sol1] [equs2 sol2] H1 H2.
+  unfold unification_step in H2. simpl in *.
+  destruct equs1 as [| [pat1 pat2] equs1 ]; try easy.
+  destruct pat1.
+  - destruct is_free eqn:Heq1; try easy.
+    injection H2 as <- <-.
+    intros x vx. simpl.
+    intros [[=->->] | Hin].
+    + split. now apply is_free_false.
+      intros pat1 pat2 Hin.
+      apply map_in in Hin as [[pat1' pat2'] [Hin [=->->]]].
+      admit. (* should be trivial (no matter the context) *)
+    + apply map_in in Hin as [[y vy] [Hin [=->->]]].
+      specialize (H1 _ _ Hin) as [H1 H2]. simpl in H2.
+      specialize (H2 _ _ (or_introl eq_refl)) as [H2 H3].
+      admit. (* should be trivial in context *)
+  - destruct pat2.
+    + destruct is_free eqn:Heq1; try easy.
+      injection H2 as <- <-.
+      intros x vx. simpl.
+      intros [[=<-<-] | Hin].
+      * split. now apply is_free_false.
+        intros pat1 pat2 Hin.
+        apply map_in in Hin as [[pat1' pat2'] [Hin [=->->]]].
+        admit. (* should be trivial (no matter the context) *)
+      * apply map_in in Hin as [[y vy] [Hin [=->->]]].
+        admit. (* should be trivial in context *)
+    + destruct (s =? s0)%string eqn:Heq; try easy.
+      apply String.eqb_eq in Heq as <-.
+      destruct decompose eqn:Heq; try easy.
+      injection H2 as <- <-.
+        admit. (* need a lemma about variables after decomposition *)
 Admitted.

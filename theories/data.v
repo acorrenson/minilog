@@ -34,6 +34,14 @@ Fixpoint is_free (p : pattern) (x : nat) : bool :=
 Axiom is_free_iff:
   forall p x, is_free p x = true <-> free_var p x.
 
+Theorem is_free_false:
+  forall p x, is_free p x = false -> ~free_var p x.
+Proof.
+  intros p x H Hcontr.
+  apply is_free_iff in Hcontr.
+  now rewrite Hcontr in H.
+Qed.
+
 (** ** Induction Principles *)
 
 (** We need a stronger induction principle that
