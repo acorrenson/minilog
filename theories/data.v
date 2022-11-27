@@ -19,29 +19,6 @@ Inductive pattern :=
 
 Definition Pcst (c : string) := Papp c [].
 
-(** Free variables of a pattern *)
-Inductive free_var : pattern -> pset nat :=
-  | free_var_var x : free_var (Pvar x) x
-  | free_var_app x f l :
-    Exists (fun p => free_var p x) l -> free_var (Papp f l) x.
-
-Fixpoint is_free (p : pattern) (x : nat) : bool :=
-  match p with
-  | Pvar y => (y =? x)%nat
-  | Papp _ pats => existsb (fun p => is_free p x) pats
-  end.
-
-Axiom is_free_iff:
-  forall p x, is_free p x = true <-> free_var p x.
-
-Theorem is_free_false:
-  forall p x, is_free p x = false -> ~free_var p x.
-Proof.
-  intros p x H Hcontr.
-  apply is_free_iff in Hcontr.
-  now rewrite Hcontr in H.
-Qed.
-
 (** ** Induction Principles *)
 
 (** We need a stronger induction principle that
@@ -83,6 +60,50 @@ Fixpoint pattern_induction
     in
     Hind f pats (helper pats)
   end.
+
+(** Free variables of a pattern *)
+Inductive free_var : pattern -> pset nat :=
+| free_var_var x : free_var (Pvar x) x
+| free_var_app x f l :
+  Exists (fun p => free_var p x) l -> free_var (Papp f l) x.
+
+Fixpoint is_free (p : pattern) (x : nat) : bool :=
+  match p with
+  | Pvar y => (y =? x)%nat
+  | Papp _ pats => existsb (fun p => is_free p x) pats
+end.
+
+Lemma is_free_iff:
+  forall p x, is_free p x = true <-> free_var p x.
+Proof.
+  induction p using pattern_induction.
+  - intros y. split.
+    + intros Hy. simpl in Hy.
+      apply Nat.eqb_eq in Hy as ->.
+      econstructor.
+    + inversion 1; subst. simpl. 
+      apply Nat.eqb_refl.
+  - intros x. split.
+    + simpl.
+      intros [pat [Hpat1 Hpat2]]%existsb_exists.
+      rewrite Forall_forall in H.
+      pose proof (proj1 (H _ Hpat1 _) Hpat2).
+      econstructor. apply Exists_exists.
+      now exists pat.
+    + inversion_clear 1 as [|? ? ? [pat [Hpat1 Hpat2]]%Exists_exists]; subst.
+      rewrite Forall_forall in H.
+      pose proof (proj2 (H _ Hpat1 _) Hpat2).
+      apply existsb_exists.
+      now exists pat.
+Qed.
+
+Theorem is_free_false:
+  forall p x, is_free p x = false -> ~free_var p x.
+Proof.
+  intros p x H Hcontr.
+  apply is_free_iff in Hcontr.
+  now rewrite Hcontr in H.
+Qed.
 
 Declare Scope datum.
 Delimit Scope datum with datum.
